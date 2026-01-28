@@ -1,5 +1,6 @@
+
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Transaction, Category, AccountType, TransactionType, Goal, CreditCard } from '../types';
+import { Transaction, Category, AccountType, TransactionType, Goal, CreditCard, BankAccount } from '../types';
 import { DEFAULT_CATEGORIES, MOCK_TRANSACTIONS, MOCK_CARDS } from '../constants';
 
 interface FinanceContextType {
@@ -7,12 +8,14 @@ interface FinanceContextType {
   categories: Category[];
   goals: Goal[];
   cards: CreditCard[];
-  isPJEnabled: boolean; // Novo estado
-  togglePJSupport: () => void; // Nova função
+  bankAccounts: BankAccount[];
+  isPJEnabled: boolean;
+  togglePJSupport: () => void;
   addTransaction: (transaction: Omit<Transaction, 'id'>) => void;
   updateTransaction: (transaction: Transaction) => void;
   deleteTransaction: (id: string) => void;
   executeTransfer: (amount: number, from: AccountType, to: AccountType, date: string, description: string) => void;
+  executeBankTransfer: (amount: number, fromBankId: string, toBankId: string, date: string, description: string) => void;
   addInstallmentTransaction: (baseTransaction: Omit<Transaction, 'id' | 'amount' | 'installmentInfo'>, totalAmount: number, installments: number) => void;
   addCategory: (category: Omit<Category, 'id'>) => void;
   updateCategory: (category: Category) => void;
@@ -22,6 +25,10 @@ interface FinanceContextType {
   deleteGoal: (id: string) => void;
   addCard: (card: Omit<CreditCard, 'id'>) => void;
   deleteCard: (id: string) => void;
+  addBankAccount: (bank: Omit<BankAccount, 'id'>) => void;
+  updateBankAccount: (bank: BankAccount) => void;
+  deleteBankAccount: (id: string) => void;
+  getBankBalance: (bankId: string) => number;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -31,6 +38,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [categories, setCategories] = useState<Category[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   
   // Estado para controle da Conta PJ (Padrão: true)
   const [isPJEnabled, setIsPJEnabled] = useState<boolean>(() => {
@@ -38,19 +46,18 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     return stored !== null ? JSON.parse(stored) : true;
   });
 
-  // Load Transactions from LocalStorage
+  // Load Transactions
   useEffect(() => {
     const storedTx = localStorage.getItem('findual_transactions');
     if (storedTx) {
       setTransactions(JSON.parse(storedTx));
     } else {
-      // Seed with mock data if empty
       // @ts-ignore
       setTransactions([...MOCK_TRANSACTIONS]);
     }
   }, []);
 
-  // Load Categories from LocalStorage
+  // Load Categories
   useEffect(() => {
     const storedCats = localStorage.getItem('findual_categories');
     if (storedCats) {
@@ -60,7 +67,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   }, []);
 
-  // Load Goals from LocalStorage
+  // Load Goals
   useEffect(() => {
     const storedGoals = localStorage.getItem('findual_goals');
     if (storedGoals) {
@@ -68,7 +75,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   }, []);
 
-  // Load Cards from LocalStorage
+  // Load Cards
   useEffect(() => {
     const storedCards = localStorage.getItem('findual_cards');
     if (storedCards) {
@@ -78,33 +85,42 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   }, []);
 
-  // Save Transactions
+  // Load Bank Accounts
   useEffect(() => {
-    if (transactions.length > 0) {
-      localStorage.setItem('findual_transactions', JSON.stringify(transactions));
+    const storedBanks = localStorage.getItem('findual_banks');
+    if (storedBanks) {
+      setBankAccounts(JSON.parse(storedBanks));
+    } else {
+      // Mock inicial de bancos se não houver
+      setBankAccounts([
+        { id: 'bank-1', name: 'Nubank', initialBalance: 1500.00, accountType: 'PF', color: '#820ad1' },
+        { id: 'bank-2', name: 'Itaú', initialBalance: 0, accountType: 'PF', color: '#ec7000' },
+        { id: 'bank-3', name: 'Inter Empresas', initialBalance: 5000.00, accountType: 'PJ', color: '#ff7a00' }
+      ]);
     }
+  }, []);
+
+  // Save Effects
+  useEffect(() => {
+    if (transactions.length > 0) localStorage.setItem('findual_transactions', JSON.stringify(transactions));
   }, [transactions]);
 
-  // Save Categories
   useEffect(() => {
-    if (categories.length > 0) {
-      localStorage.setItem('findual_categories', JSON.stringify(categories));
-    }
+    if (categories.length > 0) localStorage.setItem('findual_categories', JSON.stringify(categories));
   }, [categories]);
 
-  // Save Goals
   useEffect(() => {
     localStorage.setItem('findual_goals', JSON.stringify(goals));
   }, [goals]);
 
-  // Save Cards
   useEffect(() => {
-    if (cards.length > 0) {
-        localStorage.setItem('findual_cards', JSON.stringify(cards));
-    }
+    if (cards.length > 0) localStorage.setItem('findual_cards', JSON.stringify(cards));
   }, [cards]);
+  
+  useEffect(() => {
+    if (bankAccounts.length > 0) localStorage.setItem('findual_banks', JSON.stringify(bankAccounts));
+  }, [bankAccounts]);
 
-  // Save PJ Settings
   useEffect(() => {
     localStorage.setItem('findual_is_pj_enabled', JSON.stringify(isPJEnabled));
   }, [isPJEnabled]);
@@ -127,6 +143,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setTransactions((prev) => prev.filter((tx) => tx.id !== id));
   };
 
+  // Generic Transfer (Context Switch PF <-> PJ without specific bank enforcement)
   const executeTransfer = (amount: number, from: AccountType, to: AccountType, date: string, description: string) => {
     const expenseTx: Transaction = {
       id: crypto.randomUUID(),
@@ -155,7 +172,44 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setTransactions((prev) => [incomeTx, expenseTx, ...prev]);
   };
 
-  // Create multiple transactions based on installments
+  // Specific Bank to Bank Transfer
+  const executeBankTransfer = (amount: number, fromBankId: string, toBankId: string, date: string, description: string) => {
+    const fromBank = bankAccounts.find(b => b.id === fromBankId);
+    const toBank = bankAccounts.find(b => b.id === toBankId);
+
+    if (!fromBank || !toBank) return;
+
+    // Saída do Banco Origem
+    const expenseTx: Transaction = {
+      id: crypto.randomUUID(),
+      description: `Transf. para ${toBank.name}: ${description}`,
+      amount,
+      date,
+      type: 'EXPENSE',
+      category: 'Transferência',
+      accountType: fromBank.accountType,
+      paymentMethod: 'DEBIT',
+      bankAccountId: fromBankId,
+      isTransfer: true,
+    };
+
+    // Entrada no Banco Destino
+    const incomeTx: Transaction = {
+      id: crypto.randomUUID(),
+      description: `Transf. de ${fromBank.name}: ${description}`,
+      amount,
+      date,
+      type: 'INCOME',
+      category: 'Transferência',
+      accountType: toBank.accountType,
+      paymentMethod: 'DEBIT',
+      bankAccountId: toBankId,
+      isTransfer: true,
+    };
+
+    setTransactions((prev) => [incomeTx, expenseTx, ...prev]);
+  };
+
   const addInstallmentTransaction = (
     baseTransaction: Omit<Transaction, 'id' | 'amount' | 'installmentInfo'>, 
     totalAmount: number, 
@@ -165,21 +219,16 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     const newTransactions: Transaction[] = [];
     const groupId = crypto.randomUUID();
     
-    // Parse date correctly to avoid timezone issues
     const [year, month, day] = baseTransaction.date.split('-').map(Number);
-    // Note: Month in JS Date is 0-indexed (0 = Jan, 11 = Dec)
     
     for (let i = 0; i < installments; i++) {
       const currentDate = new Date(year, month - 1 + i, day);
-      
-      // Fix potential formatting issues (e.g. 2023-1-5 to 2023-01-05)
       const dateStr = [
         currentDate.getFullYear(),
         (currentDate.getMonth() + 1).toString().padStart(2, '0'),
         currentDate.getDate().toString().padStart(2, '0')
       ].join('-');
 
-      // Correction for last installment rounding differences
       let currentAmount = installmentValue;
       if (i === installments - 1) {
         const sumSoFar = installmentValue * (installments - 1);
@@ -192,7 +241,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         amount: currentAmount,
         date: dateStr,
         description: `${baseTransaction.description} (${i + 1}/${installments})`,
-        paymentMethod: 'CREDIT', // Force Credit
+        paymentMethod: 'CREDIT',
         installmentInfo: {
           current: i + 1,
           total: installments,
@@ -242,18 +291,52 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setCards((prev) => prev.filter((c) => c.id !== id));
   };
 
+  // Bank Account Management
+  const addBankAccount = (bank: Omit<BankAccount, 'id'>) => {
+    const newBank: BankAccount = { ...bank, id: crypto.randomUUID() };
+    setBankAccounts((prev) => [...prev, newBank]);
+  };
+
+  const updateBankAccount = (bank: BankAccount) => {
+    setBankAccounts((prev) => prev.map((b) => (b.id === bank.id ? bank : b)));
+  };
+
+  const deleteBankAccount = (id: string) => {
+    setBankAccounts((prev) => prev.filter((b) => b.id !== id));
+    // Opcional: Remover referência das transações ou avisar o usuário
+  };
+
+  const getBankBalance = (bankId: string) => {
+    const bank = bankAccounts.find(b => b.id === bankId);
+    if (!bank) return 0;
+
+    let balance = bank.initialBalance || 0;
+    
+    // Somar transações vinculadas a este banco
+    transactions.forEach(t => {
+      if (t.bankAccountId === bankId) {
+        if (t.type === 'INCOME') balance += t.amount;
+        if (t.type === 'EXPENSE') balance -= t.amount;
+      }
+    });
+
+    return balance;
+  };
+
   return (
     <FinanceContext.Provider value={{ 
       transactions, 
       categories,
       goals,
       cards,
+      bankAccounts,
       isPJEnabled,
       togglePJSupport,
       addTransaction, 
       updateTransaction, 
       deleteTransaction, 
       executeTransfer,
+      executeBankTransfer,
       addInstallmentTransaction,
       addCategory,
       updateCategory,
@@ -262,7 +345,11 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       updateGoal,
       deleteGoal,
       addCard,
-      deleteCard
+      deleteCard,
+      addBankAccount,
+      updateBankAccount,
+      deleteBankAccount,
+      getBankBalance
     }}>
       {children}
     </FinanceContext.Provider>

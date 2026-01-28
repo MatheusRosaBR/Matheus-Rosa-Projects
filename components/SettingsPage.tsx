@@ -5,22 +5,6 @@ import { useFinance } from '../context/FinanceContext';
 export const SettingsPage: React.FC = () => {
   const { isPJEnabled, togglePJSupport } = useFinance();
 
-  const scrollToSection = (id: string) => {
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
-
-  const NavItem = ({ id, icon: Icon, label }: { id: string, icon: any, label: string }) => (
-    <button 
-      onClick={() => scrollToSection(id)}
-      className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-100 text-slate-600 font-medium transition-colors text-left focus:outline-none focus:bg-slate-100 focus:text-slate-800"
-    >
-      <Icon size={18} /> {label}
-    </button>
-  );
-
   return (
     <div className="space-y-8 animate-fade-in-up">
       {/* Header */}
@@ -31,16 +15,26 @@ export const SettingsPage: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         {/* Left Column: Navigation */}
-        <div className="lg:col-span-1 space-y-2 sticky top-24 bg-white/50 backdrop-blur-sm p-2 rounded-xl border border-slate-100/50">
-          <NavItem id="profile" icon={User} label="Perfil do Usuário" />
-          <NavItem id="preferences" icon={Palette} label="Preferências" />
-          <NavItem id="security" icon={Lock} label="Segurança" />
-          <NavItem id="account-type" icon={Briefcase} label="Tipos de Conta" />
-          <NavItem id="notifications" icon={Bell} label="Notificações" />
+        <div className="lg:col-span-1 space-y-2 sticky top-24">
+          <a href="#profile" className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-100 text-brand-primary font-semibold">
+            <User size={18} /> Perfil do Usuário
+          </a>
+          <a href="#preferences" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-100 text-slate-600 font-medium transition-colors">
+            <Palette size={18} /> Preferências
+          </a>
+          <a href="#security" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-100 text-slate-600 font-medium transition-colors">
+            <Lock size={18} /> Segurança
+          </a>
+          <a href="#account-type" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-100 text-slate-600 font-medium transition-colors">
+            <Briefcase size={18} /> Tipos de Conta
+          </a>
+          <a href="#notifications" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-100 text-slate-600 font-medium transition-colors">
+            <Bell size={18} /> Notificações
+          </a>
         </div>
 
         {/* Right Column: Content */}
-        <div className="lg:col-span-2 space-y-8 pb-20">
+        <div className="lg:col-span-2 space-y-8">
           
           {/* 1. Profile Section */}
           <div id="profile" className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 scroll-mt-24">

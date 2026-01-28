@@ -1,5 +1,6 @@
+
 import React, { useEffect, useState } from 'react';
-import { X, CreditCard, Banknote } from 'lucide-react';
+import { X, CreditCard, Banknote, Landmark } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { Transaction, TransactionType, AccountType, PaymentMethod } from '../types';
 
@@ -11,7 +12,7 @@ interface Props {
 }
 
 export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, editTransaction, defaultIsRecurring = false }) => {
-  const { addTransaction, updateTransaction, categories, cards, isPJEnabled } = useFinance();
+  const { addTransaction, updateTransaction, categories, cards, bankAccounts, isPJEnabled } = useFinance();
   
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
@@ -21,6 +22,7 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, editTransac
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('DEBIT');
   const [category, setCategory] = useState('');
   const [cardId, setCardId] = useState('');
+  const [bankAccountId, setBankAccountId] = useState('');
   
   // O estado isRecurring existe, mas não é exposto visualmente para edição
   const [isRecurring, setIsRecurring] = useState(false);
@@ -35,6 +37,7 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, editTransac
       setPaymentMethod(editTransaction.paymentMethod || 'DEBIT');
       setCategory(editTransaction.category);
       setCardId(editTransaction.cardId || '');
+      setBankAccountId(editTransaction.bankAccountId || '');
       setIsRecurring(editTransaction.isRecurring || false);
     } else {
       // Defaults
@@ -46,6 +49,7 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, editTransac
       setPaymentMethod('DEBIT');
       setCategory('');
       setCardId('');
+      setBankAccountId('');
       // Define recorrência baseado puramente na prop (Aba de origem)
       setIsRecurring(defaultIsRecurring);
     }
@@ -63,6 +67,9 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, editTransac
   // Filter cards based on account type
   const availableCards = cards.filter(c => c.accountType === accountType);
 
+  // Filter banks based on account type
+  const availableBanks = bankAccounts.filter(b => b.accountType === accountType);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const payload = {
@@ -74,7 +81,8 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, editTransac
       paymentMethod,
       category: category || 'Outros',
       isRecurring, // Valor determinado logicamente, não por input do usuário
-      cardId: (paymentMethod === 'CREDIT' && type === 'EXPENSE') ? cardId : undefined
+      cardId: (paymentMethod === 'CREDIT' && type === 'EXPENSE') ? cardId : undefined,
+      bankAccountId: (paymentMethod === 'DEBIT' && bankAccountId) ? bankAccountId : undefined
     };
 
     if (editTransaction) {
@@ -138,7 +146,8 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, editTransac
                               checked={accountType === 'PF'}
                               onChange={() => {
                                 setAccountType('PF');
-                                setCardId(''); // Reset card selection on account switch
+                                setCardId(''); 
+                                setBankAccountId('');
                               }} 
                           />
                           <span className="text-sm font-bold">PF</span>
@@ -151,7 +160,8 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, editTransac
                               checked={accountType === 'PJ'}
                               onChange={() => {
                                 setAccountType('PJ');
-                                setCardId(''); // Reset card selection on account switch
+                                setCardId(''); 
+                                setBankAccountId('');
                               }} 
                           />
                           <span className="text-sm font-bold">PJ</span>
@@ -159,7 +169,6 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, editTransac
                   </div>
                </div>
              ) : (
-               // Se PJ desabilitado, mantém input hidden para lógica funcionar mas visualmente mostra apenas que é PF (ou nada)
                <input type="hidden" name="accountType" value="PF" />
              )}
 
@@ -214,6 +223,29 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, editTransac
                 <p className="text-[10px] text-rose-500 mt-1">Nenhum cartão {accountType} cadastrado.</p>
               )}
             </div>
+          )}
+
+          {/* Bank Selection Logic (New) */}
+          {paymentMethod === 'DEBIT' && (
+             <div className="animate-fade-in">
+                <label className="block text-xs font-medium text-slate-500 mb-1">Banco / Conta (Opcional)</label>
+                <div className="relative">
+                  <Landmark className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                  <select
+                    value={bankAccountId}
+                    onChange={(e) => setBankAccountId(e.target.value)}
+                    className="w-full pl-9 pr-2 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-800 outline-none transition-all"
+                  >
+                    <option value="">Sem vínculo bancário</option>
+                    {availableBanks.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {availableBanks.length === 0 && (
+                  <p className="text-[10px] text-slate-400 mt-1">Nenhuma conta {accountType} cadastrada. <a href="#/bank-accounts" className="underline">Criar agora</a></p>
+                )}
+             </div>
           )}
 
           <div>

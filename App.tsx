@@ -1,6 +1,7 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, List, ArrowRightLeft, Plus, Tags, LogOut, FileText, ChevronUp, Settings, Repeat, Target, CreditCard } from 'lucide-react';
+import { LayoutDashboard, List, ArrowRightLeft, Plus, Tags, LogOut, FileText, ChevronUp, Settings, Repeat, Target, CreditCard, Landmark } from 'lucide-react';
 import { FinanceProvider, useFinance } from './context/FinanceContext';
 import { Dashboard } from './components/Dashboard';
 import { TransactionList } from './components/TransactionList';
@@ -10,6 +11,7 @@ import { CategoryManager } from './components/CategoryManager';
 import { RecurringManager } from './components/RecurringManager';
 import { GoalsManager } from './components/GoalsManager';
 import { CreditCardManager } from './components/CreditCardManager';
+import { BankAccountManager } from './components/BankAccountManager';
 import { ExportModal } from './components/ExportModal';
 import { SettingsPage } from './components/SettingsPage';
 import { Transaction } from './types';
@@ -35,6 +37,7 @@ const Sidebar = ({ onOpenExport }: { onOpenExport: () => void }) => {
   const navItems = [
     { path: '/', icon: LayoutDashboard, label: 'Visão Geral' },
     { path: '/transactions', icon: List, label: 'Transações' },
+    { path: '/bank-accounts', icon: Landmark, label: 'Contas Bancárias' },
     { path: '/credit-cards', icon: CreditCard, label: 'Cartões' },
     { path: '/recurring', icon: Repeat, label: 'Recorrências' },
     { path: '/goals', icon: Target, label: 'Metas' },
@@ -140,9 +143,8 @@ const MainContent = ({ onOpenExport }: { onOpenExport: () => void }) => {
         <div className="flex gap-4">
              <Link to="/"><LayoutDashboard size={20}/></Link>
              <Link to="/transactions"><List size={20}/></Link>
-             <Link to="/recurring"><Repeat size={20}/></Link>
-             <Link to="/goals"><Target size={20}/></Link>
-             <button onClick={onOpenExport}><FileText size={20} /></button>
+             <Link to="/bank-accounts"><Landmark size={20} /></Link>
+             <Link to="/credit-cards"><CreditCard size={20}/></Link>
         </div>
       </div>
 
@@ -178,6 +180,7 @@ const MainContent = ({ onOpenExport }: { onOpenExport: () => void }) => {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/transactions" element={<TransactionList onEdit={handleEdit} />} />
+          <Route path="/bank-accounts" element={<BankAccountManager />} />
           <Route path="/credit-cards" element={<CreditCardManager />} />
           <Route path="/recurring" element={<RecurringManager />} />
           <Route path="/goals" element={<GoalsManager />} />

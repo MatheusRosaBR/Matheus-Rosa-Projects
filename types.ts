@@ -1,3 +1,4 @@
+
 export type AccountType = 'PF' | 'PJ';
 
 export type TransactionType = 'INCOME' | 'EXPENSE';
@@ -20,6 +21,14 @@ export interface CreditCard {
   accountType: AccountType;
 }
 
+export interface BankAccount {
+  id: string;
+  name: string;
+  initialBalance: number;
+  accountType: AccountType;
+  color?: string;
+}
+
 export interface Transaction {
   id: string;
   description: string;
@@ -30,6 +39,7 @@ export interface Transaction {
   accountType: AccountType;
   paymentMethod: PaymentMethod;
   cardId?: string; // Optional reference to the specific Credit Card used
+  bankAccountId?: string; // Optional reference to the specific Bank Account
   isTransfer?: boolean; // Flag to identify internal transfers
   isRecurring?: boolean; // Flag to identify recurring transactions
   installmentInfo?: {
