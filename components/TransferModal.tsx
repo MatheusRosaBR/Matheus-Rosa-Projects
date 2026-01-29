@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { X, ArrowRightLeft } from 'lucide-react';
+import { X, ArrowRightLeft, Landmark } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { AccountType } from '../types';
 
@@ -9,11 +10,15 @@ interface Props {
 }
 
 export const TransferModal: React.FC<Props> = ({ isOpen, onClose }) => {
-  const { executeTransfer } = useFinance();
+  const { executeTransfer, bankAccounts } = useFinance();
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
   const [direction, setDirection] = useState<'PJ_TO_PF' | 'PF_TO_PJ'>('PJ_TO_PF');
+  
+  // Bank Selection States
+  const [fromBankId, setFromBankId] = useState('');
+  const [toBankId, setToBankId] = useState('');
 
   if (!isOpen) return null;
 
@@ -24,12 +29,39 @@ export const TransferModal: React.FC<Props> = ({ isOpen, onClose }) => {
     const from: AccountType = direction === 'PJ_TO_PF' ? 'PJ' : 'PF';
     const to: AccountType = direction === 'PJ_TO_PF' ? 'PF' : 'PJ';
 
-    executeTransfer(parseFloat(amount), from, to, date, description);
+    executeTransfer(
+      parseFloat(amount), 
+      from, 
+      to, 
+      date, 
+      description, 
+      fromBankId || undefined, 
+      toBankId || undefined
+    );
+    
     onClose();
     // Reset form
     setAmount('');
     setDescription('');
+    setFromBankId('');
+    setToBankId('');
   };
+
+  const changeDirection = (dir: 'PJ_TO_PF' | 'PF_TO_PJ') => {
+    setDirection(dir);
+    if (dir === 'PJ_TO_PF') {
+      setDescription('Pró-labore');
+    } else {
+      setDescription('Aporte de Capital');
+    }
+    // Reset bank selections when direction changes to prevent mismatch
+    setFromBankId('');
+    setToBankId('');
+  };
+
+  // Filter banks based on current direction
+  const sourceBanks = bankAccounts.filter(b => b.accountType === (direction === 'PJ_TO_PF' ? 'PJ' : 'PF'));
+  const destBanks = bankAccounts.filter(b => b.accountType === (direction === 'PJ_TO_PF' ? 'PF' : 'PJ'));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -49,7 +81,7 @@ export const TransferModal: React.FC<Props> = ({ isOpen, onClose }) => {
           <div className="grid grid-cols-2 gap-4">
             <button
               type="button"
-              onClick={() => { setDirection('PJ_TO_PF'); setDescription('Pró-labore'); }}
+              onClick={() => changeDirection('PJ_TO_PF')}
               className={`p-3 rounded-lg border text-sm font-medium transition-all ${
                 direction === 'PJ_TO_PF' 
                   ? 'bg-brand-pj/10 border-brand-pj text-brand-pj' 
@@ -61,7 +93,7 @@ export const TransferModal: React.FC<Props> = ({ isOpen, onClose }) => {
             </button>
             <button
               type="button"
-              onClick={() => { setDirection('PF_TO_PJ'); setDescription('Aporte de Capital'); }}
+              onClick={() => changeDirection('PF_TO_PJ')}
               className={`p-3 rounded-lg border text-sm font-medium transition-all ${
                 direction === 'PF_TO_PJ' 
                   ? 'bg-brand-pf/10 border-brand-pf text-brand-pf' 
@@ -71,6 +103,48 @@ export const TransferModal: React.FC<Props> = ({ isOpen, onClose }) => {
               PF <span className="text-xs">➔</span> PJ
               <div className="text-xs font-normal mt-1 opacity-80">Aporte</div>
             </button>
+          </div>
+
+          <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+            {/* Source Bank Selection */}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
+                De (Origem {direction === 'PJ_TO_PF' ? 'PJ' : 'PF'})
+              </label>
+              <div className="relative">
+                <Landmark className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                <select
+                  value={fromBankId}
+                  onChange={(e) => setFromBankId(e.target.value)}
+                  className="w-full pl-9 pr-2 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-slate-800 outline-none"
+                >
+                  <option value="">Sem vínculo bancário (Caixa)</option>
+                  {sourceBanks.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Destination Bank Selection */}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
+                Para (Destino {direction === 'PJ_TO_PF' ? 'PF' : 'PJ'})
+              </label>
+              <div className="relative">
+                <Landmark className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                <select
+                  value={toBankId}
+                  onChange={(e) => setToBankId(e.target.value)}
+                  className="w-full pl-9 pr-2 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-slate-800 outline-none"
+                >
+                  <option value="">Sem vínculo bancário (Caixa)</option>
+                  {destBanks.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
 
           <div>

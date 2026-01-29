@@ -1,10 +1,11 @@
+
 import React, { useState } from 'react';
 import { useFinance } from '../context/FinanceContext';
-import { Goal } from '../types';
-import { Target, Plus, Edit2, Trash2, X, TrendingUp, Calendar, Trophy, Coins, CheckCircle2 } from 'lucide-react';
+import { AccountType, Goal } from '../types';
+import { Target, Plus, Edit2, Trash2, X, TrendingUp, Calendar, Trophy, Coins, CheckCircle2, User, Building2, Landmark } from 'lucide-react';
 
 export const GoalsManager: React.FC = () => {
-  const { goals, addGoal, updateGoal, deleteGoal } = useFinance();
+  const { goals, addGoal, updateGoal, deleteGoal, addFundsToGoal, bankAccounts, isPJEnabled } = useFinance();
   
   // Modals State
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
@@ -12,14 +13,18 @@ export const GoalsManager: React.FC = () => {
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [selectedGoalForUpdate, setSelectedGoalForUpdate] = useState<Goal | null>(null);
 
-  // Form States
+  // Form States (Goal Create/Edit)
   const [name, setName] = useState('');
   const [targetAmount, setTargetAmount] = useState('');
   const [currentAmount, setCurrentAmount] = useState('');
   const [deadline, setDeadline] = useState('');
+  const [accountType, setAccountType] = useState<AccountType>('PF');
   
   // Update Balance Specific State
   const [balanceAdjustment, setBalanceAdjustment] = useState('');
+  const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [sourceBankId, setSourceBankId] = useState('');
+  const [sourceAccountType, setSourceAccountType] = useState<AccountType>('PF');
 
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -48,12 +53,14 @@ export const GoalsManager: React.FC = () => {
       setTargetAmount(goal.targetAmount.toString());
       setCurrentAmount(goal.currentAmount.toString());
       setDeadline(goal.deadline || '');
+      setAccountType(goal.accountType || 'PF');
     } else {
       setEditingGoal(null);
       setName('');
       setTargetAmount('');
       setCurrentAmount('0');
       setDeadline('');
+      setAccountType('PF');
     }
     setIsGoalModalOpen(true);
   };
@@ -66,7 +73,8 @@ export const GoalsManager: React.FC = () => {
       name,
       targetAmount: parseFloat(targetAmount),
       currentAmount: parseFloat(currentAmount) || 0,
-      deadline: deadline || undefined
+      deadline: deadline || undefined,
+      accountType
     };
 
     if (editingGoal) {
@@ -80,6 +88,10 @@ export const GoalsManager: React.FC = () => {
   const handleOpenUpdateBalance = (goal: Goal) => {
     setSelectedGoalForUpdate(goal);
     setBalanceAdjustment('');
+    setTransactionDate(new Date().toISOString().split('T')[0]);
+    // Pre-select account type based on goal
+    setSourceAccountType(goal.accountType || 'PF');
+    setSourceBankId('');
     setIsUpdateBalanceOpen(true);
   };
 
@@ -88,15 +100,21 @@ export const GoalsManager: React.FC = () => {
     if (!selectedGoalForUpdate || !balanceAdjustment) return;
 
     const adjustment = parseFloat(balanceAdjustment);
-    const newAmount = selectedGoalForUpdate.currentAmount + adjustment;
-
-    updateGoal({
-      ...selectedGoalForUpdate,
-      currentAmount: newAmount < 0 ? 0 : newAmount // Prevent negative
-    });
+    
+    // Call the new function that handles both Goal Update and Transaction creation
+    addFundsToGoal(
+        selectedGoalForUpdate.id,
+        adjustment,
+        transactionDate,
+        sourceBankId || undefined,
+        sourceAccountType
+    );
     
     setIsUpdateBalanceOpen(false);
   };
+
+  // Filter banks for the selected source account type
+  const availableBanks = bankAccounts.filter(b => b.accountType === sourceAccountType);
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -107,7 +125,7 @@ export const GoalsManager: React.FC = () => {
             <Target className="text-brand-primary" />
             Metas & Objetivos
           </h2>
-          <p className="text-sm text-slate-500 mt-1">Defina seus sonhos e acompanhe o progresso financeiro.</p>
+          <p className="text-sm text-slate-500 mt-1">Defina seus sonhos e acompanhe o progresso financeiro por conta.</p>
         </div>
         <button
           onClick={() => handleOpenGoalModal()}
@@ -135,7 +153,7 @@ export const GoalsManager: React.FC = () => {
             return (
               <div key={goal.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col justify-between hover:shadow-md transition-shadow relative overflow-hidden group">
                 {isCompleted && (
-                  <div className="absolute top-0 right-0 p-2 bg-emerald-100 rounded-bl-xl">
+                  <div className="absolute top-0 right-0 p-2 bg-emerald-100 rounded-bl-xl z-10">
                     <CheckCircle2 className="text-emerald-600 w-5 h-5" />
                   </div>
                 )}
@@ -143,6 +161,16 @@ export const GoalsManager: React.FC = () => {
                 <div>
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="font-bold text-lg text-slate-800 line-clamp-1 mr-2">{goal.name}</h3>
+                  </div>
+
+                  {/* Account Badge */}
+                  <div className="mb-4">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${
+                      goal.accountType === 'PF' ? 'bg-brand-pf/10 text-brand-pf' : 'bg-brand-pj/10 text-brand-pj'
+                    }`}>
+                      {goal.accountType === 'PF' ? <User size={10} /> : <Building2 size={10} />}
+                      Conta {goal.accountType}
+                    </span>
                   </div>
                   
                   {/* Amount Display */}
@@ -154,13 +182,13 @@ export const GoalsManager: React.FC = () => {
                   {/* Progress Bar */}
                   <div className="w-full bg-slate-100 rounded-full h-3 mb-2 overflow-hidden">
                     <div 
-                      className={`h-full rounded-full transition-all duration-1000 ease-out ${isCompleted ? 'bg-emerald-500' : 'bg-brand-primary'}`}
+                      className={`h-full rounded-full transition-all duration-1000 ease-out ${isCompleted ? 'bg-emerald-500' : (goal.accountType === 'PJ' ? 'bg-brand-pj' : 'bg-brand-pf')}`}
                       style={{ width: `${percentage}%` }}
                     ></div>
                   </div>
                   
                   <div className="flex justify-between items-center text-xs font-medium mb-6">
-                    <span className={isCompleted ? 'text-emerald-600' : 'text-brand-primary'}>
+                    <span className={isCompleted ? 'text-emerald-600' : 'text-slate-600'}>
                       {percentage.toFixed(1)}% Completo
                     </span>
                     {goal.deadline ? (
@@ -211,6 +239,31 @@ export const GoalsManager: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleSaveGoal} className="p-6 space-y-4">
+              
+              {/* Account Type Selection */}
+              {isPJEnabled && (
+                <div className="flex bg-slate-100 p-1 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setAccountType('PF')}
+                    className={`flex-1 py-2 text-xs font-bold uppercase rounded-md transition-all ${
+                      accountType === 'PF' ? 'bg-white text-brand-pf shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                    }`}
+                  >
+                    Pessoa Física
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAccountType('PJ')}
+                    className={`flex-1 py-2 text-xs font-bold uppercase rounded-md transition-all ${
+                      accountType === 'PJ' ? 'bg-white text-brand-pj shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                    }`}
+                  >
+                    Pessoa Jurídica
+                  </button>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Nome do Objetivo</label>
                 <input
@@ -268,7 +321,7 @@ export const GoalsManager: React.FC = () => {
         </div>
       )}
 
-      {/* Modal: Update Balance */}
+      {/* Modal: Update Balance (With Transaction Logic) */}
       {isUpdateBalanceOpen && selectedGoalForUpdate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm animate-fade-in">
@@ -281,27 +334,86 @@ export const GoalsManager: React.FC = () => {
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={handleSaveBalance} className="p-6">
-               <p className="text-sm text-slate-600 mb-4">
-                 Quanto você quer adicionar (ou remover) da meta <span className="font-bold text-slate-800">{selectedGoalForUpdate.name}</span>?
-               </p>
+            <form onSubmit={handleSaveBalance} className="p-6 space-y-4">
                
-               <div className="relative mb-6">
-                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">R$</span>
-                 <input
-                  type="number"
-                  step="0.01"
-                  autoFocus
-                  required
-                  value={balanceAdjustment}
-                  onChange={(e) => setBalanceAdjustment(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-300 rounded-lg text-lg font-bold text-slate-800 focus:ring-2 focus:ring-brand-primary outline-none"
-                  placeholder="0,00"
-                />
-                <p className="text-xs text-slate-400 mt-2">Use valores negativos (ex: -50) para retirar.</p>
+               <div>
+                 <p className="text-sm text-slate-600 mb-4">
+                   Quanto você quer adicionar (ou remover) da meta <span className="font-bold text-slate-800">{selectedGoalForUpdate.name}</span>?
+                 </p>
+                 
+                 <div className="relative">
+                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">R$</span>
+                   <input
+                    type="number"
+                    step="0.01"
+                    autoFocus
+                    required
+                    value={balanceAdjustment}
+                    onChange={(e) => setBalanceAdjustment(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-slate-300 rounded-lg text-lg font-bold text-slate-800 focus:ring-2 focus:ring-brand-primary outline-none"
+                    placeholder="0,00"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Valores positivos criam despesas (aporte). Negativos criam receitas (resgate).</p>
+                 </div>
                </div>
 
-               <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg mb-6 border border-slate-100">
+               {/* Source Account Type */}
+               {isPJEnabled && (
+                <div>
+                   <label className="block text-xs font-medium text-slate-500 mb-1">Conta de Origem/Destino</label>
+                   <div className="flex bg-slate-100 p-1 rounded-lg">
+                    <button
+                        type="button"
+                        onClick={() => { setSourceAccountType('PF'); setSourceBankId(''); }}
+                        className={`flex-1 py-1.5 text-xs font-bold uppercase rounded-md transition-all ${
+                        sourceAccountType === 'PF' ? 'bg-white text-brand-pf shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                    >
+                        Pessoa Física
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => { setSourceAccountType('PJ'); setSourceBankId(''); }}
+                        className={`flex-1 py-1.5 text-xs font-bold uppercase rounded-md transition-all ${
+                        sourceAccountType === 'PJ' ? 'bg-white text-brand-pj shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                    >
+                        Pessoa Jurídica
+                    </button>
+                   </div>
+                </div>
+               )}
+
+               {/* Bank Selection */}
+               <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Banco (Opcional)</label>
+                  <div className="relative">
+                    <Landmark className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                    <select
+                        value={sourceBankId}
+                        onChange={(e) => setSourceBankId(e.target.value)}
+                        className="w-full pl-9 pr-2 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-slate-800 outline-none"
+                    >
+                        <option value="">Carteira / Caixa</option>
+                        {availableBanks.map(b => (
+                            <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                    </select>
+                  </div>
+               </div>
+
+               <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Data da Transação</label>
+                <input
+                  type="date"
+                  required
+                  value={transactionDate}
+                  onChange={(e) => setTransactionDate(e.target.value)}
+                  className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-slate-800"
+                />
+               </div>
+
+               <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-100">
                   <div className="text-xs text-slate-500">Saldo Atual</div>
                   <div className="font-bold text-slate-700">{formatCurrency(selectedGoalForUpdate.currentAmount)}</div>
                </div>

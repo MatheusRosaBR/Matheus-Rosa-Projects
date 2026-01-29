@@ -1,9 +1,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, List, ArrowRightLeft, Plus, Tags, LogOut, FileText, ChevronUp, Settings, Repeat, Target, CreditCard, Landmark } from 'lucide-react';
+import { LayoutDashboard, List, ArrowRightLeft, Plus, Tags, LogOut, FileText, ChevronUp, Settings, Repeat, Target, CreditCard, Landmark, LayoutTemplate } from 'lucide-react';
 import { FinanceProvider, useFinance } from './context/FinanceContext';
 import { Dashboard } from './components/Dashboard';
+import { AccountsDashboard } from './components/AccountsDashboard';
 import { TransactionList } from './components/TransactionList';
 import { TransactionModal } from './components/TransactionModal';
 import { TransferModal } from './components/TransferModal';
@@ -36,6 +37,7 @@ const Sidebar = ({ onOpenExport }: { onOpenExport: () => void }) => {
   
   const navItems = [
     { path: '/', icon: LayoutDashboard, label: 'Visão Geral' },
+    { path: '/accounts', icon: LayoutTemplate, label: 'Minhas Contas' },
     { path: '/transactions', icon: List, label: 'Transações' },
     { path: '/bank-accounts', icon: Landmark, label: 'Contas Bancárias' },
     { path: '/credit-cards', icon: CreditCard, label: 'Cartões' },
@@ -179,6 +181,7 @@ const MainContent = ({ onOpenExport }: { onOpenExport: () => void }) => {
       <main className="p-4 md:p-8 max-w-7xl mx-auto">
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/accounts" element={<AccountsDashboard />} />
           <Route path="/transactions" element={<TransactionList onEdit={handleEdit} />} />
           <Route path="/bank-accounts" element={<BankAccountManager />} />
           <Route path="/credit-cards" element={<CreditCardManager />} />

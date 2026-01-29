@@ -54,6 +54,7 @@ export interface Goal {
   name: string;
   targetAmount: number;
   currentAmount: number;
+  accountType: AccountType; // Novo campo para definir contexto da meta
   deadline?: string; // Optional: ISO String YYYY-MM-DD
 }
 

@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Transaction, Category, AccountType, TransactionType, Goal, CreditCard, BankAccount } from '../types';
-import { DEFAULT_CATEGORIES, MOCK_TRANSACTIONS, MOCK_CARDS } from '../constants';
+import { DEFAULT_CATEGORIES } from '../constants';
 
 interface FinanceContextType {
   transactions: Transaction[];
@@ -14,7 +14,7 @@ interface FinanceContextType {
   addTransaction: (transaction: Omit<Transaction, 'id'>) => void;
   updateTransaction: (transaction: Transaction) => void;
   deleteTransaction: (id: string) => void;
-  executeTransfer: (amount: number, from: AccountType, to: AccountType, date: string, description: string) => void;
+  executeTransfer: (amount: number, from: AccountType, to: AccountType, date: string, description: string, fromBankId?: string, toBankId?: string) => void;
   executeBankTransfer: (amount: number, fromBankId: string, toBankId: string, date: string, description: string) => void;
   addInstallmentTransaction: (baseTransaction: Omit<Transaction, 'id' | 'amount' | 'installmentInfo'>, totalAmount: number, installments: number) => void;
   addCategory: (category: Omit<Category, 'id'>) => void;
@@ -22,6 +22,7 @@ interface FinanceContextType {
   deleteCategory: (id: string) => void;
   addGoal: (goal: Omit<Goal, 'id'>) => void;
   updateGoal: (goal: Goal) => void;
+  addFundsToGoal: (goalId: string, amount: number, date: string, bankId: string | undefined, accountType: AccountType) => void;
   deleteGoal: (id: string) => void;
   addCard: (card: Omit<CreditCard, 'id'>) => void;
   deleteCard: (id: string) => void;
@@ -29,6 +30,7 @@ interface FinanceContextType {
   updateBankAccount: (bank: BankAccount) => void;
   deleteBankAccount: (id: string) => void;
   getBankBalance: (bankId: string) => number;
+  resetData: () => void;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -52,8 +54,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     if (storedTx) {
       setTransactions(JSON.parse(storedTx));
     } else {
-      // @ts-ignore
-      setTransactions([...MOCK_TRANSACTIONS]);
+      setTransactions([]);
     }
   }, []);
 
@@ -72,6 +73,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     const storedGoals = localStorage.getItem('findual_goals');
     if (storedGoals) {
       setGoals(JSON.parse(storedGoals));
+    } else {
+      setGoals([]);
     }
   }, []);
 
@@ -81,7 +84,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     if (storedCards) {
       setCards(JSON.parse(storedCards));
     } else {
-      setCards(MOCK_CARDS);
+      setCards([]);
     }
   }, []);
 
@@ -91,22 +94,17 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     if (storedBanks) {
       setBankAccounts(JSON.parse(storedBanks));
     } else {
-      // Mock inicial de bancos se não houver
-      setBankAccounts([
-        { id: 'bank-1', name: 'Nubank', initialBalance: 1500.00, accountType: 'PF', color: '#820ad1' },
-        { id: 'bank-2', name: 'Itaú', initialBalance: 0, accountType: 'PF', color: '#ec7000' },
-        { id: 'bank-3', name: 'Inter Empresas', initialBalance: 5000.00, accountType: 'PJ', color: '#ff7a00' }
-      ]);
+      setBankAccounts([]);
     }
   }, []);
 
   // Save Effects
   useEffect(() => {
-    if (transactions.length > 0) localStorage.setItem('findual_transactions', JSON.stringify(transactions));
+    localStorage.setItem('findual_transactions', JSON.stringify(transactions));
   }, [transactions]);
 
   useEffect(() => {
-    if (categories.length > 0) localStorage.setItem('findual_categories', JSON.stringify(categories));
+    localStorage.setItem('findual_categories', JSON.stringify(categories));
   }, [categories]);
 
   useEffect(() => {
@@ -114,11 +112,11 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [goals]);
 
   useEffect(() => {
-    if (cards.length > 0) localStorage.setItem('findual_cards', JSON.stringify(cards));
+    localStorage.setItem('findual_cards', JSON.stringify(cards));
   }, [cards]);
   
   useEffect(() => {
-    if (bankAccounts.length > 0) localStorage.setItem('findual_banks', JSON.stringify(bankAccounts));
+    localStorage.setItem('findual_banks', JSON.stringify(bankAccounts));
   }, [bankAccounts]);
 
   useEffect(() => {
@@ -127,6 +125,18 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const togglePJSupport = () => {
     setIsPJEnabled(prev => !prev);
+  };
+
+  const resetData = () => {
+    localStorage.removeItem('findual_transactions');
+    localStorage.removeItem('findual_categories');
+    localStorage.removeItem('findual_goals');
+    localStorage.removeItem('findual_cards');
+    localStorage.removeItem('findual_banks');
+    localStorage.removeItem('findual_is_pj_enabled');
+    
+    // Recarrega a página para garantir estado limpo
+    window.location.reload();
   };
 
   // Transactions Logic
@@ -143,8 +153,16 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setTransactions((prev) => prev.filter((tx) => tx.id !== id));
   };
 
-  // Generic Transfer (Context Switch PF <-> PJ without specific bank enforcement)
-  const executeTransfer = (amount: number, from: AccountType, to: AccountType, date: string, description: string) => {
+  // Generic Transfer (Context Switch PF <-> PJ with optional bank enforcement)
+  const executeTransfer = (
+    amount: number, 
+    from: AccountType, 
+    to: AccountType, 
+    date: string, 
+    description: string,
+    fromBankId?: string,
+    toBankId?: string
+  ) => {
     const expenseTx: Transaction = {
       id: crypto.randomUUID(),
       description: `Saída: ${description}`,
@@ -155,6 +173,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       accountType: from,
       paymentMethod: 'DEBIT',
       isTransfer: true,
+      bankAccountId: fromBankId // Link to specific bank if selected
     };
 
     const incomeTx: Transaction = {
@@ -167,12 +186,13 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       accountType: to,
       paymentMethod: 'DEBIT',
       isTransfer: true,
+      bankAccountId: toBankId // Link to specific bank if selected
     };
 
     setTransactions((prev) => [incomeTx, expenseTx, ...prev]);
   };
 
-  // Specific Bank to Bank Transfer
+  // Specific Bank to Bank Transfer (Internal)
   const executeBankTransfer = (amount: number, fromBankId: string, toBankId: string, date: string, description: string) => {
     const fromBank = bankAccounts.find(b => b.id === fromBankId);
     const toBank = bankAccounts.find(b => b.id === toBankId);
@@ -277,6 +297,49 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     setGoals((prev) => prev.map((goal) => (goal.id === g.id ? g : goal)));
   };
 
+  // Nova função para gerenciar aporte/resgate de metas com transação
+  const addFundsToGoal = (
+    goalId: string, 
+    amount: number, 
+    date: string, 
+    bankId: string | undefined,
+    accountType: AccountType
+  ) => {
+    // 1. Atualizar saldo da Meta
+    let goalName = '';
+    setGoals((prev) => prev.map((goal) => {
+      if (goal.id === goalId) {
+        goalName = goal.name;
+        // Permite valor negativo, mas não deixa saldo < 0
+        const newAmount = Math.max(0, goal.currentAmount + amount);
+        return { ...goal, currentAmount: newAmount };
+      }
+      return goal;
+    }));
+
+    // 2. Criar Transação de registro
+    // Se amount > 0 (Aporte): É uma DESPESA na conta de origem (dinheiro sai do caixa e vira patrimônio/meta)
+    // Se amount < 0 (Resgate): É uma RECEITA na conta de destino (dinheiro volta da meta para o caixa)
+    const isInvestment = amount > 0;
+    const absAmount = Math.abs(amount);
+
+    if (absAmount > 0) {
+      const newTx: Transaction = {
+        id: crypto.randomUUID(),
+        description: isInvestment ? `Aporte: ${goalName}` : `Resgate: ${goalName}`,
+        amount: absAmount,
+        date: date,
+        type: isInvestment ? 'EXPENSE' : 'INCOME',
+        // Tenta achar categoria 'Investimento', se não usa Outros ou cria dinamicamente
+        category: 'Investimento', // Poderíamos buscar na lista de categorias, mas vamos simplificar
+        accountType: accountType,
+        paymentMethod: 'DEBIT',
+        bankAccountId: bankId
+      };
+      setTransactions(prev => [newTx, ...prev]);
+    }
+  };
+
   const deleteGoal = (id: string) => {
     setGoals((prev) => prev.filter((goal) => goal.id !== id));
   };
@@ -303,7 +366,6 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const deleteBankAccount = (id: string) => {
     setBankAccounts((prev) => prev.filter((b) => b.id !== id));
-    // Opcional: Remover referência das transações ou avisar o usuário
   };
 
   const getBankBalance = (bankId: string) => {
@@ -343,13 +405,15 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
       deleteCategory,
       addGoal,
       updateGoal,
+      addFundsToGoal,
       deleteGoal,
       addCard,
       deleteCard,
       addBankAccount,
       updateBankAccount,
       deleteBankAccount,
-      getBankBalance
+      getBankBalance,
+      resetData
     }}>
       {children}
     </FinanceContext.Provider>

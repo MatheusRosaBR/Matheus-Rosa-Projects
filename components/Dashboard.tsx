@@ -1,78 +1,72 @@
 
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useFinance } from '../context/FinanceContext';
+import { Link } from 'react-router-dom';
 import { 
   Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, AreaChart, Area
 } from 'recharts';
-import { Wallet, TrendingUp, TrendingDown, Building2, User, CreditCard, Repeat, CalendarClock, Tags, Target, ChevronLeft, ChevronRight, Scale, Landmark, Filter, Check } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Scale, Globe, ArrowUpRight, CalendarClock, CreditCard, Repeat, CheckCircle2 } from 'lucide-react';
 import { Transaction } from '../types';
 import { DayDetailModal } from './DayDetailModal';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-const formatDateDay = (dateStr: string) => {
-  const date = new Date(dateStr);
-  const userTimezoneOffset = date.getTimezoneOffset() * 60000;
-  const adjustedDate = new Date(date.getTime() + userTimezoneOffset);
-  return adjustedDate.getDate().toString().padStart(2, '0');
-};
-
-type PeriodOption = 'CURRENT' | 'LAST' | '3M' | '6M' | '12M';
-
 export const Dashboard: React.FC = () => {
-  const { transactions, goals, cards, isPJEnabled, bankAccounts, getBankBalance } = useFinance();
-  const [categoryTab, setCategoryTab] = useState<'PF' | 'PJ'>('PF');
+  const { transactions, isPJEnabled, bankAccounts, cards } = useFinance();
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   // State para o modal de detalhes do dia
   const [isDayDetailModalOpen, setIsDayDetailModalOpen] = useState(false);
   const [selectedDayData, setSelectedDayData] = useState<{ day: string; transactions: Transaction[] }>({ day: '', transactions: [] });
 
-  // State para Filtro do Gráfico de Despesas
-  const [expensePeriod, setExpensePeriod] = useState<PeriodOption>('CURRENT');
-  const [isExpenseFilterOpen, setIsExpenseFilterOpen] = useState(false);
-  const filterRef = useRef<HTMLDivElement>(null);
+  // --- KPI GLOBAL ---
+  const globalMetrics = useMemo(() => {
+    // 1. Saldo Inicial de todos os bancos
+    const totalInitialBankBalance = bankAccounts.reduce((acc, bank) => acc + bank.initialBalance, 0);
 
-  // Fechar o dropdown se clicar fora
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
-        setIsExpenseFilterOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    // 2. Saldo de todas as movimentações (Income - Expense)
+    let netTransactionBalance = 0;
+    
+    // 3. Métricas de Fluxo do Mês
+    let monthIncome = 0;
+    let monthExpense = 0;
 
-  const metrics = useMemo(() => {
-    let balancePF = 0;
-    let balancePJ = 0;
-    let income = 0;
-    let expense = 0;
-    let creditExpense = 0;
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
     transactions.forEach(t => {
+      // Saldo Geral: Considera TUDO para o patrimônio líquido (incluindo transações sem banco)
+      // Se for uma transferência interna genérica (sem banco), ela sai de um lado e entra no outro.
+      // O saldo líquido da transação será 0 no total (Ex: -3000 + 3000 = 0), o que está correto para visão global.
+      // Se for uma entrada externa genérica, soma.
       const val = t.type === 'INCOME' ? t.amount : -t.amount;
-      if (t.accountType === 'PF') balancePF += val;
-      else balancePJ += val;
+      netTransactionBalance += val;
 
-      if (t.type === 'INCOME') {
-        income += t.amount;
-      } else {
-        expense += t.amount;
-        if (t.paymentMethod === 'CREDIT') {
-          creditExpense += t.amount;
-        }
+      // Métricas de Fluxo (Receita/Despesa Mês)
+      // AQUI mantemos a lógica de ignorar transferências para não duplicar o volume movimentado
+      const tDate = new Date(t.date);
+      const adjustedDate = new Date(tDate.getTime() + tDate.getTimezoneOffset() * 60000);
+      
+      if (adjustedDate >= startOfMonth && adjustedDate <= endOfMonth && !t.isTransfer) {
+        if (t.type === 'INCOME') monthIncome += t.amount;
+        else monthExpense += t.amount;
       }
     });
 
-    return { balancePF, balancePJ, total: balancePF + balancePJ, income, expense, creditExpense };
-  }, [transactions]);
+    return { 
+      totalBalance: totalInitialBankBalance + netTransactionBalance, 
+      monthIncome, 
+      monthExpense 
+    };
+  }, [bankAccounts, transactions]);
 
-  const monthlyMetrics = useMemo(() => {
+
+  // --- DADOS DO MÊS SELECIONADO (GRÁFICO) ---
+  const monthlyData = useMemo(() => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
 
@@ -86,608 +80,314 @@ export const Dashboard: React.FC = () => {
       const adjustedDate = new Date(tDate.getTime() + userTimezoneOffset);
       return adjustedDate >= startDate && adjustedDate <= endDate;
     });
-
-    let income = 0;
-    let expense = 0;
     
     const daysInMonth = endDate.getDate();
     const dailyData = Array.from({ length: daysInMonth }, (_, i) => ({
       day: (i + 1).toString().padStart(2, '0'),
-      pf: 0,
-      pj: 0,
+      income: 0,
+      expense: 0,
     }));
 
     monthTransactions.forEach(t => {
-      if (t.type === 'INCOME') {
-        income += t.amount;
-      } else {
-        expense += t.amount;
-        const tDate = new Date(t.date);
-        const userTimezoneOffset = tDate.getTimezoneOffset() * 60000;
-        const adjustedDate = new Date(tDate.getTime() + userTimezoneOffset);
-        const dayOfMonth = adjustedDate.getDate() - 1;
+      if (t.isTransfer) return;
 
-        if (dailyData[dayOfMonth]) {
-          if (t.accountType === 'PF') {
-            dailyData[dayOfMonth].pf += t.amount;
-          } else {
-            dailyData[dayOfMonth].pj += t.amount;
-          }
-        }
+      const tDate = new Date(t.date);
+      const userTimezoneOffset = tDate.getTimezoneOffset() * 60000;
+      const adjustedDate = new Date(tDate.getTime() + userTimezoneOffset);
+      const dayOfMonth = adjustedDate.getDate() - 1;
+
+      if (dailyData[dayOfMonth]) {
+        if (t.type === 'INCOME') dailyData[dayOfMonth].income += t.amount;
+        else dailyData[dayOfMonth].expense += t.amount;
       }
     });
 
-    const recurringExpenses = transactions.filter(t => t.isRecurring && t.type === 'EXPENSE');
-    
-    recurringExpenses.forEach(recTx => {
-      const dayOfMonth = new Date(recTx.date).getUTCDate(); 
-      const dayIndex = dayOfMonth - 1;
-
-      if (dayIndex >= 0 && dayIndex < daysInMonth) {
-        expense += recTx.amount;
-        if (recTx.accountType === 'PF') {
-          dailyData[dayIndex].pf += recTx.amount;
-        } else {
-          dailyData[dayIndex].pj += recTx.amount;
-        }
-      }
-    });
-
-    return {
-      income,
-      expense,
-      balance: income - expense,
-      chartData: dailyData
-    };
+    return dailyData;
   }, [transactions, currentMonth]);
 
-  // Lógica Específica para o Gráfico de Despesas por Conta com Filtro
-  const expenseChartData = useMemo(() => {
-    const now = new Date();
-    let startDate: Date;
-    let endDate: Date = new Date(now.getFullYear(), now.getMonth() + 1, 0); // Fim do mês atual por padrão
-    let label = '';
+  // --- COMPOSIÇÃO DE GASTOS GLOBAL (PIE) ---
+  const globalCategoryData = useMemo(() => {
+    const map: Record<string, number> = {};
+    transactions
+      .filter(t => t.type === 'EXPENSE' && !t.isTransfer)
+      .forEach(t => {
+        const cat = t.category || 'Outros';
+        map[cat] = (map[cat] || 0) + t.amount;
+      });
 
-    // Define as datas baseado no filtro
-    switch (expensePeriod) {
-      case 'CURRENT':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        label = 'Mês Atual';
-        break;
-      case 'LAST':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        endDate = new Date(now.getFullYear(), now.getMonth(), 0);
-        label = 'Mês Passado';
-        break;
-      case '3M':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-        label = 'Últimos 3 Meses';
-        break;
-      case '6M':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-        label = 'Últimos 6 Meses';
-        break;
-      case '12M':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-        label = 'Últimos 12 Meses';
-        break;
-      default:
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    }
+    return Object.entries(map)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6); // Top 6 categorias
+  }, [transactions]);
 
-    // Helper para converter string YYYY-MM-DD para Date com timezone correto para comparação
-    const parseDate = (dateStr: string) => {
-        const [y, m, d] = dateStr.split('-').map(Number);
-        return new Date(y, m - 1, d);
-    };
+  // --- PRÓXIMOS VENCIMENTOS (Recorrências + Faturas) ---
+  const upcomingBills = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const next30Days = new Date(today);
+    next30Days.setDate(today.getDate() + 30);
 
-    let pfExpense = 0;
-    let pjExpense = 0;
+    const billsMap = new Map<string, { date: Date, total: number, items: Array<{ name: string, amount: number, type: 'CARD' | 'RECURRING', account: string }> }>();
 
-    transactions.filter(t => t.type === 'EXPENSE').forEach(t => {
-      const tDate = parseDate(t.date);
+    // 1. Processar Recorrências
+    transactions.filter(t => t.isRecurring && t.type === 'EXPENSE').forEach(t => {
+      const originalDate = new Date(t.date);
+      // Pega o dia da recorrência
+      const day = originalDate.getDate() + 1; // Ajuste simples de fuso para pegar o dia correto visualmente
       
-      // Verifica se está dentro do período selecionado
-      if (tDate >= startDate && tDate <= endDate) {
-        if(t.accountType === 'PF') pfExpense += t.amount;
-        else pjExpense += t.amount;
+      // Determina a data de vencimento neste mês
+      let nextDate = new Date(today.getFullYear(), today.getMonth(), day);
+      
+      // Se já passou hoje, joga para o próximo mês
+      if (nextDate < today) {
+        nextDate = new Date(today.getFullYear(), today.getMonth() + 1, day);
+      }
+
+      // Se estiver dentro dos próximos 30 dias
+      if (nextDate <= next30Days) {
+        const key = nextDate.toISOString().split('T')[0];
+        const existing = billsMap.get(key) || { date: nextDate, total: 0, items: [] };
+        
+        existing.total += t.amount;
+        existing.items.push({
+          name: t.description,
+          amount: t.amount,
+          type: 'RECURRING',
+          account: t.accountType
+        });
+        
+        billsMap.set(key, existing);
       }
     });
 
-    const data = [
-      { name: 'Despesas PF', value: pfExpense },
-    ];
-    
-    if (isPJEnabled) {
-      data.push({ name: 'Despesas PJ', value: pjExpense });
-    }
+    // 2. Processar Cartões de Crédito (Faturas)
+    cards.forEach(card => {
+      // Determina a próxima data de vencimento
+      let nextDueDate = new Date(today.getFullYear(), today.getMonth(), card.dueDay);
+      if (nextDueDate < today) {
+        nextDueDate = new Date(today.getFullYear(), today.getMonth() + 1, card.dueDay);
+      }
 
-    return { data, label };
-  }, [transactions, isPJEnabled, expensePeriod]);
-
-  // Gráfico antigo de métodos de pagamento (Mantido Global)
-  const methodChartData = useMemo(() => {
-    let creditTotal = 0;
-    let debitPfTotal = 0;
-    let debitPjTotal = 0;
-
-    transactions.filter(t => t.type === 'EXPENSE').forEach(t => {
-       if (t.paymentMethod === 'CREDIT') {
-         creditTotal += t.amount;
-       } else {
-         if (t.accountType === 'PF') {
-           debitPfTotal += t.amount;
-         } else {
-           debitPjTotal += t.amount;
-         }
-       }
-    });
-
-    const data = [
-      { name: 'Crédito', value: creditTotal },
-      { name: 'Débito/Transf. (PF)', value: debitPfTotal },
-    ];
-
-    if (isPJEnabled) {
-      data.push({ name: 'Débito/Transf. (PJ)', value: debitPjTotal });
-    }
-
-    return data;
-  }, [transactions, isPJEnabled]);
-
-  const categoryData = useMemo(() => {
-    const categoriesMap: Record<string, { pf: number, pj: number, total: number }> = {};
-    
-    transactions
-      .filter(t => t.type === 'EXPENSE')
-      .forEach(t => {
-        const cat = t.category || 'Outros';
-        
-        if (!categoriesMap[cat]) {
-            categoriesMap[cat] = { pf: 0, pj: 0, total: 0 };
-        }
-        
-        if (t.accountType === 'PF') {
-            categoriesMap[cat].pf += t.amount;
-        } else {
-            categoriesMap[cat].pj += t.amount;
-        }
-        
-        categoriesMap[cat].total += t.amount;
-      });
-
-    return Object.entries(categoriesMap)
-      .map(([name, values]) => ({ name, ...values }))
-      .sort((a, b) => b.total - a.total);
-  }, [transactions]);
-
-  const recurringData = useMemo(() => {
-    const recurring = transactions.filter(t => t.isRecurring);
-    const pfList = recurring.filter(t => t.accountType === 'PF');
-    const pjList = recurring.filter(t => t.accountType === 'PJ');
-
-    const calcTotal = (list: Transaction[]) => list.reduce((acc, t) => {
-      return acc + (t.type === 'INCOME' ? t.amount : -t.amount);
-    }, 0);
-
-    return {
-      pf: pfList,
-      pj: pjList,
-      pfTotal: calcTotal(pfList),
-      pjTotal: calcTotal(pjList)
-    };
-  }, [transactions]);
-
-  const cardExpenses = useMemo(() => {
-    if (cards.length === 0) return [];
-    
-    const visibleCards = isPJEnabled ? cards : cards.filter(c => c.accountType === 'PF');
-
-    return visibleCards.map(card => {
-      const totalSpent = transactions
+      // Calcula valor estimado (Soma de gastos no crédito no ciclo "atual" aproximado)
+      // Simplificação: Soma gastos de crédito não pagos ou recentes
+      const cardExpenses = transactions
         .filter(t => t.paymentMethod === 'CREDIT' && t.cardId === card.id && t.type === 'EXPENSE')
         .reduce((acc, t) => acc + t.amount, 0);
       
-      return {
-        ...card,
-        totalSpent,
-        percentageUsed: (totalSpent / card.limit) * 100
-      };
-    }).sort((a, b) => b.totalSpent - a.totalSpent);
-  }, [cards, transactions, isPJEnabled]);
+      // Apenas adiciona se houver valor e estiver na janela de 30 dias
+      if (cardExpenses > 0 && nextDueDate <= next30Days) {
+        const key = nextDueDate.toISOString().split('T')[0];
+        const existing = billsMap.get(key) || { date: nextDueDate, total: 0, items: [] };
+        
+        existing.total += cardExpenses; // Valor total acumulado do cartão (Simplificado)
+        existing.items.push({
+          name: `Fatura ${card.name}`,
+          amount: cardExpenses,
+          type: 'CARD',
+          account: card.accountType
+        });
+        
+        billsMap.set(key, existing);
+      }
+    });
 
-  const handlePreviousMonth = () => {
-    setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
-  };
+    // Converter Map para Array e Ordenar
+    return Array.from(billsMap.values())
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+      .slice(0, 5); // Pegar os top 5 dias
 
-  const handleNextMonth = () => {
-    setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
-  };
+  }, [transactions, cards]);
 
+
+  const COLORS = ['#0f172a', '#334155', '#475569', '#64748b', '#94a3b8', '#cbd5e1'];
+
+  const handlePreviousMonth = () => setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  const handleNextMonth = () => setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
   const isNextMonthDisabled = useMemo(() => {
     const today = new Date();
     const next = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
     return next > today;
   }, [currentMonth]);
 
-  const handleBarClick = (data: any) => {
-    if (!data || !data.activePayload || data.activePayload.length === 0) return;
-    const payload = data.activePayload[0].payload;
-    if (payload.pf + payload.pj === 0) return;
-
-    const day = payload.day;
-    const clickedDayNumber = parseInt(day, 10);
-
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth();
-
-    const realTransactionsOnDay = transactions.filter(t => {
-      if (t.isRecurring || t.type !== 'EXPENSE') return false;
-      const tDate = new Date(t.date);
-      const userTimezoneOffset = tDate.getTimezoneOffset() * 60000;
-      const adjustedDate = new Date(tDate.getTime() + userTimezoneOffset);
-      return adjustedDate.getFullYear() === year && adjustedDate.getMonth() === month && adjustedDate.getDate() === clickedDayNumber;
-    });
-
-    const recurringTransactionsOnDay = transactions.filter(t => {
-      if (!t.isRecurring || t.type !== 'EXPENSE') return false;
-      const recurringDay = new Date(t.date).getUTCDate();
-      return recurringDay === clickedDayNumber;
-    });
-    
-    let allTransactionsForDay = [...realTransactionsOnDay, ...recurringTransactionsOnDay];
-    if (!isPJEnabled) {
-      allTransactionsForDay = allTransactionsForDay.filter(t => t.accountType === 'PF');
-    }
-
-    if (allTransactionsForDay.length > 0) {
-      setSelectedDayData({ day, transactions: allTransactionsForDay });
-      setIsDayDetailModalOpen(true);
-    }
-  };
-
-  const COLORS = ['#8b5cf6', '#0ea5e9']; // Violet (PF), Sky (PJ)
-  const METHOD_COLORS = ['#f43f5e', '#8b5cf6', '#0ea5e9']; // Rose (Credit), Violet (PF Debit), Sky (PJ Debit)
-  
-  const RecurringList = ({ list, type }: { list: Transaction[], type: 'PF' | 'PJ' }) => {
-    if (list.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center py-8 text-slate-400 border border-dashed border-slate-200 rounded-lg bg-slate-50/50 h-full">
-          <CalendarClock size={24} className="mb-2 opacity-50" />
-          <p className="text-xs">Sem recorrências ativas</p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-3">
-        {list.map(t => (
-          <div key={t.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 hover:border-slate-200 transition-colors">
-            <div className="flex items-center gap-3">
-              <div className="flex flex-col items-center justify-center bg-white border border-slate-200 rounded p-1 min-w-[40px]">
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Dia</span>
-                <span className="text-sm font-bold text-slate-700">{formatDateDay(t.date)}</span>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-slate-700 line-clamp-1">{t.description}</p>
-                <p className="text-xs text-slate-400">{t.category}</p>
-              </div>
-            </div>
-            <div className={`text-sm font-semibold ${t.type === 'INCOME' ? 'text-emerald-600' : 'text-slate-600'}`}>
-              {t.type === 'EXPENSE' ? '-' : '+'} {formatCurrency(t.amount)}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
   return (
-    <div className="space-y-6 animate-fade-in-up">
-      {/* KPI Cards */}
-      <div className={`grid grid-cols-1 ${isPJEnabled ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-6`}>
-        {/* Consolidated */}
-        <div className={`${isPJEnabled ? 'md:col-span-2' : 'md:col-span-2'} bg-slate-900 text-white p-6 rounded-2xl shadow-xl flex flex-col justify-between relative overflow-hidden`}>
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-10 -mt-10 blur-2xl"></div>
-          <div className="flex items-center gap-3 mb-2 z-10">
-            <div className="p-2 bg-white/10 rounded-lg"><Wallet className="w-5 h-5 text-emerald-400" /></div>
-            <span className="text-slate-300 text-sm font-medium">Saldo {isPJEnabled ? 'Consolidado' : 'Atual'}</span>
-          </div>
-          <div className="text-3xl font-bold z-10">{formatCurrency(metrics.total)}</div>
-          <div className="flex gap-4 mt-4 text-xs text-slate-400 z-10">
-            <div className="flex items-center gap-1"><TrendingUp size={14} className="text-emerald-400"/> {formatCurrency(metrics.income)}</div>
-            <div className="flex items-center gap-1"><TrendingDown size={14} className="text-rose-400"/> {formatCurrency(metrics.expense)}</div>
-          </div>
-        </div>
+    <div className="space-y-8 animate-fade-in-up">
+      
+      {/* GLOBAL HERO SECTION */}
+      <div className="bg-slate-900 rounded-3xl p-8 text-white shadow-2xl relative overflow-hidden">
+         {/* Background Decoration */}
+         <div className="absolute top-0 right-0 w-64 h-64 bg-brand-primary/20 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+         <div className="absolute bottom-0 left-0 w-48 h-48 bg-brand-pf/20 rounded-full blur-3xl -ml-10 -mb-10 pointer-events-none"></div>
 
-        {/* PF */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-brand-pf/10 rounded-lg"><User className="w-5 h-5 text-brand-pf" /></div>
-            <span className="text-slate-500 text-sm font-medium">Conta Pessoal</span>
-          </div>
-          <div className={`text-2xl font-bold ${metrics.balancePF >= 0 ? 'text-slate-800' : 'text-rose-600'}`}>
-            {formatCurrency(metrics.balancePF)}
-          </div>
-        </div>
+         <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            <div>
+               <div className="flex items-center gap-2 mb-2 text-slate-400">
+                  <Globe size={20} />
+                  <span className="text-sm font-medium uppercase tracking-widest">Visão Consolidada</span>
+               </div>
+               <h1 className="text-4xl md:text-5xl font-bold mb-4">{formatCurrency(globalMetrics.totalBalance)}</h1>
+               <p className="text-slate-400 text-sm max-w-md">
+                 Este é o seu patrimônio líquido total somando todas as contas (Pessoa Física e Jurídica), incluindo saldos bancários e valores em trânsito.
+               </p>
+            </div>
 
-        {/* PJ - Only show if enabled */}
-        {isPJEnabled && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-brand-pj/10 rounded-lg"><Building2 className="w-5 h-5 text-brand-pj" /></div>
-              <span className="text-slate-500 text-sm font-medium">Conta Empresa</span>
+            <div className="grid grid-cols-2 gap-4">
+               <div className="bg-white/10 backdrop-blur-sm p-4 rounded-xl border border-white/10">
+                  <div className="flex items-center gap-2 mb-2 text-emerald-400">
+                     <TrendingUp size={16} />
+                     <span className="text-xs font-bold uppercase">Entradas (Mês)</span>
+                  </div>
+                  <p className="text-xl font-bold">{formatCurrency(globalMetrics.monthIncome)}</p>
+               </div>
+               <div className="bg-white/10 backdrop-blur-sm p-4 rounded-xl border border-white/10">
+                  <div className="flex items-center gap-2 mb-2 text-rose-400">
+                     <TrendingDown size={16} />
+                     <span className="text-xs font-bold uppercase">Saídas (Mês)</span>
+                  </div>
+                  <p className="text-xl font-bold">{formatCurrency(globalMetrics.monthExpense)}</p>
+               </div>
             </div>
-            <div className={`text-2xl font-bold ${metrics.balancePJ >= 0 ? 'text-slate-800' : 'text-rose-600'}`}>
-              {formatCurrency(metrics.balancePJ)}
-            </div>
-          </div>
-        )}
+         </div>
       </div>
 
-      {/* Bank Balances Section */}
-      {bankAccounts.length > 0 && (
-         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in">
-            {bankAccounts.filter(b => isPJEnabled || b.accountType === 'PF').map(bank => {
-                const balance = getBankBalance(bank.id);
-                return (
-                    <div key={bank.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-2 mb-2">
-                            <div 
-                              className="w-2 h-2 rounded-full" 
-                              style={{ backgroundColor: bank.color || '#cbd5e1' }}
-                            ></div>
-                            <span className="text-xs font-bold text-slate-500 uppercase">{bank.name}</span>
-                        </div>
-                        <div className={`text-lg font-bold ${balance >= 0 ? 'text-slate-800' : 'text-rose-600'}`}>
-                            {formatCurrency(balance)}
-                        </div>
-                         <span className="text-[10px] text-slate-400 mt-1">{bank.accountType}</span>
-                    </div>
-                );
-            })}
-         </div>
-      )}
-      
-      {/* Monthly Overview Section */}
+      {/* FLUXO DE CAIXA GLOBAL */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-            <h3 className="text-lg font-bold text-slate-800">Visão Geral do Mês</h3>
+            <div>
+               <h3 className="text-lg font-bold text-slate-800">Fluxo de Caixa Global</h3>
+               <p className="text-sm text-slate-500">Entradas vs Saídas de todas as contas (Exclui transferências internas)</p>
+            </div>
             <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
-                <button 
-                    onClick={handlePreviousMonth}
-                    className="p-2 text-slate-500 hover:text-slate-800 hover:bg-white rounded-md transition-colors"
-                    aria-label="Mês anterior"
-                >
-                    <ChevronLeft size={16} />
-                </button>
+                <button onClick={handlePreviousMonth} className="p-2 text-slate-500 hover:text-slate-800 hover:bg-white rounded-md transition-colors"><ChevronLeft size={16} /></button>
                 <span className="text-sm font-bold text-slate-700 w-32 text-center capitalize">
                     {currentMonth.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
                 </span>
-                <button 
-                    onClick={handleNextMonth}
-                    disabled={isNextMonthDisabled}
-                    className="p-2 text-slate-500 hover:text-slate-800 hover:bg-white rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    aria-label="Próximo mês"
-                >
-                    <ChevronRight size={16} />
-                </button>
+                <button onClick={handleNextMonth} disabled={isNextMonthDisabled} className="p-2 text-slate-500 hover:text-slate-800 hover:bg-white rounded-md transition-colors disabled:opacity-40"><ChevronRight size={16} /></button>
             </div>
         </div>
 
-        {/* Monthly Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="flex items-center gap-4 p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
-                <div className="p-2 bg-white rounded-full text-emerald-500"><TrendingUp size={20}/></div>
-                <div>
-                    <p className="text-xs font-medium text-emerald-700">Receitas no Mês</p>
-                    <p className="text-lg font-bold text-emerald-600">{formatCurrency(monthlyMetrics.income)}</p>
-                </div>
-            </div>
-            <div className="flex items-center gap-4 p-4 bg-rose-50 border border-rose-100 rounded-xl">
-                <div className="p-2 bg-white rounded-full text-rose-500"><TrendingDown size={20}/></div>
-                <div>
-                    <p className="text-xs font-medium text-rose-700">Despesas no Mês</p>
-                    <p className="text-lg font-bold text-rose-600">{formatCurrency(monthlyMetrics.expense)}</p>
-                </div>
-            </div>
-            <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
-                <div className="p-2 bg-white rounded-full text-slate-500"><Scale size={20}/></div>
-                <div>
-                    <p className="text-xs font-medium text-slate-700">Balanço do Mês</p>
-                    <p className={`text-lg font-bold ${monthlyMetrics.balance >= 0 ? 'text-slate-800' : 'text-rose-600'}`}>
-                        {formatCurrency(monthlyMetrics.balance)}
-                    </p>
-                </div>
-            </div>
-        </div>
-
-        {/* Daily Expense Chart */}
         <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyMetrics.chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }} onClick={handleBarClick}>
+                <AreaChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="day" tick={{ fontSize: 12 }} stroke="#64748b" />
-                    <YAxis tickFormatter={(value) => formatCurrency(value as number)} tick={{ fontSize: 12 }} stroke="#64748b" />
-                    <Tooltip 
-                        formatter={(value: number, name: string) => [formatCurrency(value), name === 'pf' ? 'Despesas PF' : 'Despesas PJ']} 
-                        cursor={{ fill: 'rgba(241, 245, 249, 0.5)' }}
-                    />
-                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '12px' }} />
-                    <Bar dataKey="pf" stackId="a" fill="#8b5cf6" name="Despesas PF" radius={[4, 4, 0, 0]} className="cursor-pointer" />
-                    {isPJEnabled && (
-                      <Bar dataKey="pj" stackId="a" fill="#0ea5e9" name="Despesas PJ" radius={[4, 4, 0, 0]} className="cursor-pointer" />
-                    )}
-                </BarChart>
+                    <YAxis tickFormatter={(val) => `R$ ${val/1000}k`} tick={{ fontSize: 12 }} stroke="#64748b" />
+                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                    <Area type="monotone" dataKey="income" stroke="#10b981" fillOpacity={1} fill="url(#colorIncome)" name="Receitas" strokeWidth={2} />
+                    <Area type="monotone" dataKey="expense" stroke="#f43f5e" fillOpacity={1} fill="url(#colorExpense)" name="Despesas" strokeWidth={2} />
+                </AreaChart>
             </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Chart 1: Despesas por Conta (Com Filtro de Período) */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col relative z-20">
-          <div className="flex justify-between items-center mb-4">
-             <div>
-                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                   Despesas por Conta
-                </h3>
-                <p className="text-xs text-slate-500">{expenseChartData.label}</p>
-             </div>
-             
-             {/* Filter Dropdown */}
-             <div className="relative" ref={filterRef}>
-               <button 
-                onClick={() => setIsExpenseFilterOpen(!isExpenseFilterOpen)}
-                className={`p-2 rounded-lg transition-colors ${isExpenseFilterOpen ? 'bg-slate-100 text-slate-800' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
-               >
-                 <Filter size={20} />
-               </button>
-
-               {isExpenseFilterOpen && (
-                 <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-slate-100 rounded-xl shadow-xl py-1 animate-fade-in z-50">
-                    <p className="px-4 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Período</p>
-                    {[
-                      { id: 'CURRENT', label: 'Mês Atual' },
-                      { id: 'LAST', label: 'Mês Passado' },
-                      { id: '3M', label: 'Últimos 3 Meses' },
-                      { id: '6M', label: 'Últimos 6 Meses' },
-                      { id: '12M', label: 'Últimos 12 Meses' },
-                    ].map(option => (
-                      <button
-                        key={option.id}
-                        onClick={() => {
-                          setExpensePeriod(option.id as PeriodOption);
-                          setIsExpenseFilterOpen(false);
-                        }}
-                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 text-slate-700 flex items-center justify-between"
-                      >
-                        {option.label}
-                        {expensePeriod === option.id && <Check size={14} className="text-brand-primary" />}
-                      </button>
-                    ))}
-                 </div>
-               )}
-             </div>
-          </div>
-
-          <div className="h-48 w-full flex-grow">
-            {expenseChartData.data.reduce((acc, item) => acc + item.value, 0) === 0 ? (
-               <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                  <PieChart className="opacity-20 w-12 h-12 mb-2" />
-                  <p className="text-sm">Sem dados neste período</p>
-               </div>
-            ) : (
+      {/* COMPOSIÇÃO, PRÓXIMOS VENCIMENTOS E CTA */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+         
+         {/* 1. Categorias */}
+         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">Onde você gasta? (Top 5)</h3>
+            <div className="flex-1 min-h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={expenseChartData.data}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={40}
-                    outerRadius={60}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {expenseChartData.data.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                </PieChart>
+                 <PieChart>
+                    <Pie
+                      data={globalCategoryData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {globalCategoryData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                    <Legend />
+                 </PieChart>
               </ResponsiveContainer>
-            )}
-          </div>
-          {/* Summary Totals */}
-          <div className="mt-4 pt-4 border-t border-slate-50 space-y-2">
-            {expenseChartData.data.map((entry, index) => (
-              <div key={entry.name} className="flex justify-between items-center text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
-                  <span className="text-slate-600">{entry.name}</span>
-                </div>
-                <span className="font-semibold text-slate-800">{formatCurrency(entry.value)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Chart 2: Pagamentos (Crédito vs Débito) */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col z-10">
-          <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-             <CreditCard size={18} className="text-rose-500"/>
-             Métodos de Pagamento (Total)
-          </h3>
-          <div className="h-48 w-full flex-grow">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                 <Pie
-                  data={methodChartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={40}
-                  outerRadius={60}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                   {methodChartData.map((entry, index) => (
-                    <Cell key={`cell-m-${index}`} fill={METHOD_COLORS[index % METHOD_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value: number) => formatCurrency(value)} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          {/* Summary Totals */}
-          <div className="mt-4 pt-4 border-t border-slate-50 space-y-2">
-            {methodChartData.map((entry, index) => (
-              <div key={entry.name} className="flex justify-between items-center text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: METHOD_COLORS[index % METHOD_COLORS.length] }}></div>
-                  <span className="text-slate-600">{entry.name}</span>
-                </div>
-                <span className="font-semibold text-slate-800">{formatCurrency(entry.value)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-       {/* Recurring Section (Restored) */}
-       <div className={`grid grid-cols-1 ${isPJEnabled ? 'lg:grid-cols-2' : ''} gap-6`}>
-        {/* PF Recurring */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full">
-          <div className="flex justify-between items-center mb-4">
-             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-               <Repeat className="text-brand-pf" size={20}/> 
-               Recorrências PF
-             </h3>
-             <span className={`text-xs font-bold px-2 py-1 rounded-lg ${recurringData.pfTotal < 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
-               Mensal: {formatCurrency(recurringData.pfTotal)}
-             </span>
-          </div>
-          <RecurringList list={recurringData.pf} type="PF" />
-        </div>
-
-        {/* PJ Recurring */}
-        {isPJEnabled && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full">
-            <div className="flex justify-between items-center mb-4">
-               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                 <Repeat className="text-brand-pj" size={20}/> 
-                 Recorrências PJ
-               </h3>
-               <span className={`text-xs font-bold px-2 py-1 rounded-lg ${recurringData.pjTotal < 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                 Mensal: {formatCurrency(recurringData.pjTotal)}
-               </span>
             </div>
-            <RecurringList list={recurringData.pj} type="PJ" />
-          </div>
-        )}
+         </div>
+
+         {/* 2. Próximos Vencimentos (NOVO CONTAINER) */}
+         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col overflow-hidden">
+            <div className="p-6 border-b border-slate-50 bg-slate-50/30">
+                <div className="flex items-center gap-2 mb-1">
+                    <CalendarClock className="text-rose-500" size={20} />
+                    <h3 className="text-lg font-bold text-slate-800">Próximos Vencimentos</h3>
+                </div>
+                <p className="text-xs text-slate-500">Contas e faturas para os próximos 30 dias</p>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto max-h-[400px] p-2 space-y-2">
+                {upcomingBills.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8 text-center">
+                        <CheckCircle2 size={32} className="mb-2 opacity-50 text-emerald-500" />
+                        <p className="text-sm">Tudo em dia!</p>
+                        <p className="text-xs mt-1">Nenhuma recorrência ou fatura prevista.</p>
+                    </div>
+                ) : (
+                    upcomingBills.map((bill, idx) => (
+                        <div key={idx} className="bg-white border border-slate-100 p-4 rounded-xl hover:shadow-md transition-all hover:border-slate-200">
+                            <div className="flex justify-between items-center mb-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="bg-rose-50 text-rose-600 font-bold text-xs px-2 py-1 rounded-md uppercase">
+                                        {bill.date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                                    </div>
+                                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">Total do Dia</span>
+                                </div>
+                                <span className="font-bold text-slate-800">{formatCurrency(bill.total)}</span>
+                            </div>
+                            
+                            <div className="space-y-2">
+                                {bill.items.map((item, i) => (
+                                    <div key={i} className="flex items-center justify-between text-sm pl-2 border-l-2 border-slate-100">
+                                        <div className="flex items-center gap-2">
+                                            {item.type === 'CARD' ? <CreditCard size={12} className="text-slate-400"/> : <Repeat size={12} className="text-slate-400"/>}
+                                            <span className="text-slate-600 truncate max-w-[120px]" title={item.name}>{item.name}</span>
+                                            <span className={`text-[10px] px-1 rounded ${item.account === 'PF' ? 'bg-brand-pf/10 text-brand-pf' : 'bg-brand-pj/10 text-brand-pj'}`}>
+                                                {item.account}
+                                            </span>
+                                        </div>
+                                        <span className="text-slate-500 text-xs">{formatCurrency(item.amount)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+            {upcomingBills.length > 0 && (
+                <div className="p-3 bg-slate-50 text-center border-t border-slate-100">
+                    <Link to="/recurring" className="text-xs font-bold text-brand-primary hover:underline">Gerenciar Recorrências</Link>
+                </div>
+            )}
+         </div>
+
+         {/* 3. CTA Card */}
+         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 flex flex-col justify-center items-center text-center">
+            <Wallet size={48} className="text-slate-300 mb-4" />
+            <h3 className="text-xl font-bold text-slate-800 mb-2">Detalhes por Conta</h3>
+            <p className="text-slate-500 max-w-xs mb-6">
+              Acesse a gestão individualizada para ver saldos bancários específicos, limites de cartão e despesas separadas por PF e PJ.
+            </p>
+            <Link to="/accounts" className="px-6 py-3 bg-white border border-slate-300 text-slate-800 font-bold rounded-xl shadow-sm hover:shadow-md transition-all flex items-center gap-2">
+               Acessar Minhas Contas <ArrowUpRight size={18} />
+            </Link>
+         </div>
       </div>
 
-       {/* Modal de Detalhes do Dia */}
       <DayDetailModal 
         isOpen={isDayDetailModalOpen}
         onClose={() => setIsDayDetailModalOpen(false)}

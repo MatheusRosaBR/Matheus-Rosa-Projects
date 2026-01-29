@@ -1,9 +1,16 @@
+
 import React from 'react';
-import { User, Palette, Lock, Save, Bell, ShieldCheck, Briefcase, Mail, MessageSquare } from 'lucide-react';
+import { User, Palette, Briefcase, Trash2, AlertTriangle } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 
 export const SettingsPage: React.FC = () => {
-  const { isPJEnabled, togglePJSupport } = useFinance();
+  const { isPJEnabled, togglePJSupport, resetData } = useFinance();
+
+  const handleReset = () => {
+    if (confirm("ATENÇÃO: Isso apagará TODAS as suas transações, contas e cartões. O app voltará ao estado inicial. Tem certeza?")) {
+      resetData();
+    }
+  };
 
   return (
     <div className="space-y-8 animate-fade-in-up">
@@ -22,14 +29,11 @@ export const SettingsPage: React.FC = () => {
           <a href="#preferences" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-100 text-slate-600 font-medium transition-colors">
             <Palette size={18} /> Preferências
           </a>
-          <a href="#security" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-100 text-slate-600 font-medium transition-colors">
-            <Lock size={18} /> Segurança
-          </a>
           <a href="#account-type" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-100 text-slate-600 font-medium transition-colors">
             <Briefcase size={18} /> Tipos de Conta
           </a>
-          <a href="#notifications" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-100 text-slate-600 font-medium transition-colors">
-            <Bell size={18} /> Notificações
+          <a href="#danger-zone" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-rose-50 text-rose-600 font-medium transition-colors">
+            <AlertTriangle size={18} /> Zona de Perigo
           </a>
         </div>
 
@@ -67,11 +71,6 @@ export const SettingsPage: React.FC = () => {
                 />
               </div>
             </div>
-            <div className="mt-6 border-t border-slate-100 pt-4 flex justify-end">
-              <button className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 font-medium text-sm transition-colors">
-                <Save size={16} /> Salvar Alterações
-              </button>
-            </div>
           </div>
 
           {/* 2. Preferences Section */}
@@ -85,44 +84,6 @@ export const SettingsPage: React.FC = () => {
                   <option value="USD">Dólar Americano (USD)</option>
                   <option value="EUR">Euro (EUR)</option>
                 </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Tema da Interface</label>
-                <select className="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-primary outline-none transition-all">
-                  <option value="light">Claro</option>
-                  <option value="dark">Escuro (Em breve)</option>
-                  <option value="system">Padrão do Sistema (Em breve)</option>
-                </select>
-              </div>
-            </div>
-             <div className="mt-6 border-t border-slate-100 pt-4 flex justify-end">
-              <button className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 font-medium text-sm transition-colors">
-                <Save size={16} /> Salvar Preferências
-              </button>
-            </div>
-          </div>
-
-          {/* 3. Security Section */}
-          <div id="security" className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 scroll-mt-24">
-            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2"><Lock size={20} /> Segurança</h3>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center p-3 border border-slate-100 rounded-lg">
-                <div>
-                  <p className="font-medium text-sm text-slate-700">Alterar Senha</p>
-                  <p className="text-xs text-slate-400">Recomendamos atualizar sua senha periodicamente.</p>
-                </div>
-                <button className="px-4 py-2 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
-                  Alterar
-                </button>
-              </div>
-              <div className="flex justify-between items-center p-3 border border-slate-100 rounded-lg bg-slate-50">
-                <div>
-                  <p className="font-medium text-sm text-slate-700 flex items-center gap-1"><ShieldCheck size={14} className="text-emerald-500" /> Autenticação de 2 Fatores</p>
-                  <p className="text-xs text-slate-400">Aumente a segurança da sua conta.</p>
-                </div>
-                <button disabled className="px-4 py-2 bg-slate-200 text-slate-500 text-sm font-medium rounded-lg cursor-not-allowed">
-                  Ativar (Em breve)
-                </button>
               </div>
             </div>
           </div>
@@ -153,36 +114,24 @@ export const SettingsPage: React.FC = () => {
              </div>
           </div>
 
-          {/* 5. Notifications Section */}
-          <div id="notifications" className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 scroll-mt-24">
-            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2"><Bell size={20} /> Notificações</h3>
+          {/* 6. Danger Zone Section */}
+          <div id="danger-zone" className="bg-rose-50 p-6 rounded-2xl shadow-sm border border-rose-100 scroll-mt-24">
+            <h3 className="text-lg font-bold text-rose-700 mb-6 flex items-center gap-2"><AlertTriangle size={20} /> Zona de Perigo</h3>
             <div className="space-y-4">
-              <div className="flex justify-between items-center p-3 border-b border-slate-50">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-slate-100 rounded-lg text-slate-600"><Mail size={16} /></div>
-                  <div>
-                    <p className="font-medium text-sm text-slate-700">Resumo Semanal por Email</p>
-                    <p className="text-xs text-slate-400">Receba um balanço das suas finanças toda segunda-feira.</p>
-                  </div>
+              <div className="flex justify-between items-center p-4 bg-white border border-rose-200 rounded-lg">
+                <div>
+                  <p className="font-medium text-sm text-slate-700">Zerar Todos os Dados</p>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm">
+                    Isso removerá permanentemente todas as transações, bancos, cartões e metas. O app voltará ao estado original.
+                  </p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" />
-                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-primary"></div>
-                </label>
-              </div>
-
-              <div className="flex justify-between items-center p-3">
-                <div className="flex items-center gap-3">
-                   <div className="p-2 bg-slate-100 rounded-lg text-slate-600"><MessageSquare size={16} /></div>
-                  <div>
-                    <p className="font-medium text-sm text-slate-700">Alertas de Vencimento</p>
-                    <p className="text-xs text-slate-400">Notifique-me quando uma fatura ou boleto estiver próximo do vencimento.</p>
-                  </div>
-                </div>
-                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" defaultChecked />
-                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-primary"></div>
-                </label>
+                <button 
+                  onClick={handleReset}
+                  className="px-4 py-2 bg-rose-600 text-white text-sm font-bold rounded-lg hover:bg-rose-700 transition-colors shadow-lg shadow-rose-600/20"
+                >
+                  <Trash2 size={16} className="inline mr-2" />
+                  Zerar Tudo
+                </button>
               </div>
             </div>
           </div>
