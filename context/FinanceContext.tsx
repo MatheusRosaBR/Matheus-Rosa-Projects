@@ -35,6 +35,15 @@ interface FinanceContextType {
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
+// Helper seguro para gerar IDs
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback para navegadores antigos ou contextos inseguros
+  return Math.random().toString(36).substring(2) + Date.now().toString(36);
+};
+
 export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -141,7 +150,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Transactions Logic
   const addTransaction = (t: Omit<Transaction, 'id'>) => {
-    const newTx: Transaction = { ...t, id: crypto.randomUUID() };
+    const newTx: Transaction = { ...t, id: generateId() };
     setTransactions((prev) => [newTx, ...prev]);
   };
 
@@ -164,7 +173,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     toBankId?: string
   ) => {
     const expenseTx: Transaction = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       description: `Saída: ${description}`,
       amount,
       date,
@@ -177,7 +186,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     };
 
     const incomeTx: Transaction = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       description: `Entrada: ${description}`,
       amount,
       date,
@@ -201,7 +210,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     // Saída do Banco Origem
     const expenseTx: Transaction = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       description: `Transf. para ${toBank.name}: ${description}`,
       amount,
       date,
@@ -215,7 +224,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     // Entrada no Banco Destino
     const incomeTx: Transaction = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       description: `Transf. de ${fromBank.name}: ${description}`,
       amount,
       date,
@@ -237,7 +246,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
   ) => {
     const installmentValue = parseFloat((totalAmount / installments).toFixed(2));
     const newTransactions: Transaction[] = [];
-    const groupId = crypto.randomUUID();
+    const groupId = generateId();
     
     const [year, month, day] = baseTransaction.date.split('-').map(Number);
     
@@ -257,7 +266,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
       newTransactions.push({
         ...baseTransaction,
-        id: crypto.randomUUID(),
+        id: generateId(),
         amount: currentAmount,
         date: dateStr,
         description: `${baseTransaction.description} (${i + 1}/${installments})`,
@@ -275,7 +284,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Category Management
   const addCategory = (c: Omit<Category, 'id'>) => {
-    const newCat: Category = { ...c, id: crypto.randomUUID() };
+    const newCat: Category = { ...c, id: generateId() };
     setCategories((prev) => [...prev, newCat]);
   };
 
@@ -289,7 +298,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Goals Management
   const addGoal = (g: Omit<Goal, 'id'>) => {
-    const newGoal: Goal = { ...g, id: crypto.randomUUID() };
+    const newGoal: Goal = { ...g, id: generateId() };
     setGoals((prev) => [...prev, newGoal]);
   };
 
@@ -325,7 +334,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     if (absAmount > 0) {
       const newTx: Transaction = {
-        id: crypto.randomUUID(),
+        id: generateId(),
         description: isInvestment ? `Aporte: ${goalName}` : `Resgate: ${goalName}`,
         amount: absAmount,
         date: date,
@@ -346,7 +355,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Card Management
   const addCard = (card: Omit<CreditCard, 'id'>) => {
-    const newCard: CreditCard = { ...card, id: crypto.randomUUID() };
+    const newCard: CreditCard = { ...card, id: generateId() };
     setCards((prev) => [...prev, newCard]);
   };
 
@@ -356,7 +365,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Bank Account Management
   const addBankAccount = (bank: Omit<BankAccount, 'id'>) => {
-    const newBank: BankAccount = { ...bank, id: crypto.randomUUID() };
+    const newBank: BankAccount = { ...bank, id: generateId() };
     setBankAccounts((prev) => [...prev, newBank]);
   };
 
