@@ -7,4 +7,10 @@ export default defineConfig({
   build: {
     outDir: 'dist',
   },
+  resolve: {
+    alias: {
+      // Garante que referências absolutas funcionem se necessário
+      '@': '/',
+    },
+  },
 });
